@@ -122,11 +122,14 @@ dumped from your own console. None are included here, and none can be.
   rather than patch the tier out, which is also what retired our `0001` patch.
 - **ALSA is dlopen'd by DSperate itself**, so it is not a link-time dependency and does
   not need bundling.
-- **`-mtune=cortex-a55`** (override with `ARCH_FLAGS`). Every spruce aarch64 device is a
-  Cortex-A53 or A55; `-mtune` changes scheduling only, never the instruction set, so the
-  binary stays generic ARMv8-A. It is repeated in the link flags because the core is
-  built with LTO, which recompiles at link time against whatever the link command names.
-- **GCC 10**, not focal's default 9 (`CROSS_GCC=9` to switch). ccache is attached as a
+- **Profile-guided (`PGO=use`)**, from the profile upstream commits for this exact
+  toolchain (`pgo/aarch64-gcc10.5.0/`, trained in the same focal image). The profile is
+  keyed on the compiler version and the compile flags, and DSperate's configure refuses a
+  mismatch, so the compile flags are only `-pthread` on top of the Release defaults: the
+  newer Vulkan headers come in through `CPATH`, and there is no `-mtune` (its effect was
+  negligible; the binary was generic ARMv8-A either way). `PGO=OFF` builds unprofiled, and it
+  is the default when `CROSS_GCC` is changed, since no other GCC has a focal profile.
+- **GCC 10**, not focal's default 9 (`CROSS_GCC=9` to switch, which also turns PGO off). ccache is attached as a
   CMake compiler *launcher*, not as a wrapper on the compiler path: CMake finds the LTO
   archiver by looking for `gcc-ar` next to the compiler it was given, so a shim makes
   `CMAKE_CXX_COMPILER_AR` come back NOTFOUND and the static library link dies. The

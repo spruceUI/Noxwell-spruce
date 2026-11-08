@@ -15,10 +15,14 @@ CROSS=aarch64-linux-gnu
 # MEDIA, 2.30.10 on NDS Flip, 2.32.0 on PyUI dll and spruce/flip.)
 SDL2_VERSION="${SDL2_VERSION:-2.26.1}"
 
-# Every spruce aarch64 device is a Cortex-A53 (H700) or Cortex-A55 (RK3566,
-# A133P, TrimUI). -mtune only changes instruction scheduling, never the
-# instruction set, so the binary stays generic ARMv8-A and runs on both.
-ARCH_FLAGS="${ARCH_FLAGS:--mtune=cortex-a55}"
+# Profile-guided optimisation from the profile upstream commits for this exact
+# toolchain (pgo/aarch64-gcc10.5.0/, trained in the same focal image). The
+# profile is keyed on compiler version and compile flags: DSperate's configure
+# refuses a mismatch rather than silently building unprofiled, so the compile
+# flags below must stay exactly what upstream trained with (-pthread on top of
+# the Release defaults). No other GCC has a focal profile, so it defaults off
+# when CROSS_GCC is changed.
+PGO="${PGO:-$([ "$CROSS_GCC" = 10 ] && echo use || echo OFF)}"
 
 # The glibc the oldest spruce aarch64 device ships. Anything above this and
 # the binary will not load on device, which is the whole reason this repo
@@ -150,14 +154,17 @@ done
 # on our 2.31 target the symbols live in libpthread.so.0 and have to be asked
 # for. --no-as-needed because CMake puts linker flags ahead of the objects
 # that reference them, and as-needed would then drop the library.
-COMMON_FLAGS="-O3 ${ARCH_FLAGS} -pthread -I/opt/vulkan-headers/include"
+#
+# Nothing else goes in the compile flags: they are part of the PGO fingerprint
+# (see PGO above). -O3 is already the Release default, and the newer Vulkan
+# headers come in through CPATH instead, which GCC searches ahead of
+# /usr/include just as it would an -I.
+COMMON_FLAGS="-pthread"
+export CPATH=/opt/vulkan-headers/include
 LINK_FLAGS="-pthread -Wl,--no-as-needed -lpthread -Wl,--as-needed"
 # The device's libstdc++ is older than this toolchain's on several targets,
 # so carry ours. glibc stays dynamic — it is the floor we are matching.
 LINK_FLAGS="${LINK_FLAGS} -static-libstdc++ -static-libgcc"
-# The core is built with LTO, which recompiles at link time against whatever
-# the link command names, so the arch flags have to be repeated here.
-LINK_FLAGS="${LINK_FLAGS} ${ARCH_FLAGS}"
 LINK_FLAGS="${LINK_FLAGS} -L${PREFIX}/lib -Wl,-rpath-link,${PREFIX}/lib"
 LINK_FLAGS="${LINK_FLAGS} -L/usr/lib/${CROSS} -Wl,-rpath-link,/usr/lib/${CROSS}"
 
@@ -180,6 +187,7 @@ cmake -S . -B build -G Ninja \
     -DDSPERATE_HEADLESS=OFF \
     -DDSPERATE_SDL=ON \
     -DDSPERATE_WAYLAND=OFF \
+    -DDSPERATE_PGO="$PGO" \
     -DDSPERATE_TESTS=$([ "$SKIP_TESTS" = "1" ] && echo OFF || echo ON)
 
 # A configure that quietly fell back to the interpreter would still produce a
@@ -199,6 +207,12 @@ if ! grep -q -- '-DDSPERATE_GLES=1' build/compile_commands.json && \
    ! grep -q -- '-DDSPERATE_VULKAN=1' build/compile_commands.json; then
     echo "ERROR: neither GLES nor Vulkan GPU 3D raster backend was compiled in"
     exit 1
+fi
+# The configure already fails on a profile/flags mismatch; this catches the
+# option itself going missing (e.g. a renamed cache variable upstream).
+if [ "$PGO" = use ]; then
+    grep -q -- '-fprofile-use=' build/compile_commands.json || { echo "ERROR: PGO=use but no -fprofile-use in the compile commands"; exit 1; }
+    echo "PGO profile: $(sed -n 's/^DSPERATE_PGO_DIR:PATH=//p' build/CMakeCache.txt)"
 fi
 ! grep -q 'COMPILER_AR:FILEPATH=.*NOTFOUND' build/CMakeCache.txt || { echo "ERROR: no LTO archiver; the static library link would fail"; exit 1; }
 [ -d build/src/frontend/sdl ] || { echo "ERROR: SDL2 not found, no SDL frontend"; exit 1; }
@@ -316,6 +330,7 @@ toolchain:  $("$DSP_CXX" --version | head -1) (Ubuntu 20.04 multiarch)
 glibc floor: ${GLIBC_MAX}
 sdl2:       ${SDL2_VERSION} (built from source, linked not bundled)
 flags:      ${COMMON_FLAGS}
+pgo:        ${PGO}
 EOF
 
 echo "=== ccache stats ==="
