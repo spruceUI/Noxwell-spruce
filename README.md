@@ -37,6 +37,22 @@ from the A32 subset`, and the `jit` test passes under `qemu-arm` alongside the o
 because the hardcoded "jit: OFF / expect it to be slow" text outlived the fact and shipped
 a tarball describing a recompiler build as an interpreter one.
 
+Since 3.4.1 the ARMv7 recompiler implements the fast timing model too, so the A30 runs
+`emu.timing = fast` like every other build (before, the A30 was held at exact).
+
+### The 32-bit build is profile-guided
+
+`PGO=use` by default, from upstream's `pgo/armv7l/`, trained with this same A30 buildroot
+GCC 13.2. The fingerprint hashes the compiler version, `CMAKE_SYSTEM_PROCESSOR` and
+`CMAKE_CXX_FLAGS`, so two things here match upstream's own A30 toolchain exactly:
+`toolchain-a30.cmake` names the processor `armv7l` (with `arm` the configure looks in
+`pgo/arm/` and finds nothing), and the compile flags are
+`-mcpu=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -pthread`. The fpu/float-abi pair
+changes no code: DSperate's configure adds it to every ARM32 build for the NEON kernels
+(the toolchain's own default is `vfpv4-d16`, the same hard-float ABI), but it has to sit
+in `CMAKE_CXX_FLAGS` for the fingerprint. A changed `ARCH_FLAGS` has no profile, so it
+turns PGO off; `PGO=OFF` does that outright.
+
 ### The universal build
 
 JIT and NEON are both on: the cross toolchain reports `CMAKE_SYSTEM_PROCESSOR=aarch64`,

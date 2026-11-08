@@ -4,12 +4,12 @@
 # armhf, Cortex-A7, glibc 2.23 from the A30 buildroot sysroot.
 
 set(CMAKE_SYSTEM_NAME Linux)
-# NOT aarch64, and that is the whole story for this target: DSperate keys
-# DSPERATE_JIT and DSPERATE_NEON off this, and its recompiler emits AArch64 only
-# (src/core/cpu/jit/emit.h). A 32-bit build is interpreter + portable C++
-# renderer by construction. build-a30.sh asserts that rather than let it be a
-# surprise.
-set(CMAKE_SYSTEM_PROCESSOR arm)
+# armv7l, the name upstream's own A30 toolchain uses: DSperate keys its ARM32
+# recompiler and NEON kernels off any ARMv7 spelling, but the PGO profile
+# directory (pgo/armv7l/) and the profile's fingerprint use this name as-is,
+# so "arm" would build unprofiled. build-a30.sh reads what JIT and NEON came
+# out as rather than assume.
+set(CMAKE_SYSTEM_PROCESSOR armv7l)
 
 set(CMAKE_C_COMPILER   "$ENV{DSP_CC}")
 set(CMAKE_CXX_COMPILER "$ENV{DSP_CXX}")

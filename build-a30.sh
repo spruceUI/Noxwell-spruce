@@ -15,6 +15,14 @@ export PATH="${TCDIR}/bin:$PATH"
 # those from here is how you get a binary the sysroot's own libs disagree with.
 ARCH_FLAGS="${ARCH_FLAGS:--mcpu=cortex-a7}"
 
+# Profile-guided optimisation from the profile upstream commits for this
+# toolchain (pgo/armv7l/, trained with the same A30 buildroot GCC 13.2). The
+# profile is keyed on compiler version, CMAKE_SYSTEM_PROCESSOR and the compile
+# flags, and DSperate's configure refuses a mismatch rather than silently
+# building unprofiled, so the compile flags below must stay exactly what
+# upstream trained with. A changed ARCH_FLAGS has no profile, so it turns PGO off.
+PGO="${PGO:-$([ "$ARCH_FLAGS" = "-mcpu=cortex-a7" ] && echo use || echo OFF)}"
+
 # The A30 sysroot's glibc. Far below the aarch64 target's 2.31.
 GLIBC_MAX="${GLIBC_MAX:-2.23}"
 
@@ -79,7 +87,12 @@ done
 # ============================================================
 # Configure and build
 # ============================================================
-COMMON_FLAGS="-O3 ${ARCH_FLAGS} -pthread"
+# -mfpu/-mfloat-abi are what DSperate's configure adds on every ARM32 build
+# anyway (add_compile_options, for the NEON kernels; the toolchain's own
+# default is vfpv4-d16, same hard-float ABI), so they change no code here.
+# They are spelled out because the PGO fingerprint hashes CMAKE_CXX_FLAGS and
+# upstream trained with them there. -O3 is already the Release default.
+COMMON_FLAGS="${ARCH_FLAGS} -mfpu=neon-vfpv4 -mfloat-abi=hard -pthread"
 LINK_FLAGS="-pthread -Wl,--no-as-needed -lpthread -Wl,--as-needed"
 LINK_FLAGS="${LINK_FLAGS} -static-libstdc++ -static-libgcc"
 # GCC's arm backend does not stream per-function target options into LTO IR the
@@ -103,7 +116,15 @@ cmake -S . -B build -G Ninja \
     -DDSPERATE_HEADLESS=OFF \
     -DDSPERATE_SDL=ON \
     -DDSPERATE_WAYLAND=OFF \
+    -DDSPERATE_PGO="$PGO" \
     -DDSPERATE_TESTS=$([ "$SKIP_TESTS" = "1" ] && echo OFF || echo ON)
+
+# The configure already fails on a profile/flags mismatch; this catches the
+# option itself going missing (e.g. a renamed cache variable upstream).
+if [ "$PGO" = use ]; then
+    grep -q -- '-fprofile-use=' build/compile_commands.json || { echo "ERROR: PGO=use but no -fprofile-use in the compile commands"; exit 1; }
+    echo "PGO profile: $(sed -n 's/^DSPERATE_PGO_DIR:PATH=//p' build/CMakeCache.txt)"
+fi
 
 ! grep -q 'COMPILER_AR:FILEPATH=.*NOTFOUND' build/CMakeCache.txt || { echo "ERROR: no LTO archiver"; exit 1; }
 [ -d build/src/frontend/sdl ] || { echo "ERROR: SDL2 not found in sysroot, no SDL frontend"; exit 1; }
@@ -196,6 +217,7 @@ glibc floor: ${GLIBC_MAX}
 arch:       armhf, ${ARCH_FLAGS}
 jit:        ${JIT_STATE}
 neon:       ${NEON_STATE}
+pgo:        ${PGO}
 ${SPEED_NOTE}
 EOF
 

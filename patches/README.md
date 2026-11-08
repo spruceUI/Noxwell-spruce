@@ -9,9 +9,10 @@ silently missing (see `build.sh`).
   headings, warm cream/gray text on near-black). Cosmetic only; anchored on the two constexpr
   lines, so a palette change upstream fails the build instead of shipping blue.
 
-- `0002-cheevos-host-env.py` — `DS_CHEEVOS_HOST=host:port` calls `rc_client_set_host` in
-  `src/cheevos/cheevos_client.cpp`, so spruce can point DSperate at RAOfflineProxy
-  (`spruce/scripts/emu/lib/dsperate_functions.sh`). Unset, it talks to retroachievements.org.
+Upstream took `0002-cheevos-host-env.py` into 3.4.1: `DS_CHEEVOS_HOST` is native
+(`Client::start()` in `src/cheevos/cheevos_client.cpp`, after the logging is set up, so
+`DS_CHEEVOS_VERBOSE=1` shows the host it uses). spruce sets it to RAOfflineProxy
+(`spruce/scripts/emu/lib/dsperate_functions.sh`) exactly as before.
 
 Upstream took the two earlier patches into 1.6.0:
 
