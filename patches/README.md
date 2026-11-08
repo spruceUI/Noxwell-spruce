@@ -9,6 +9,10 @@ silently missing (see `build.sh`).
   headings, warm cream/gray text on near-black). Cosmetic only; anchored on the two constexpr
   lines, so a palette change upstream fails the build instead of shipping blue.
 
+- `0002-cheevos-host-env.py` — `DS_CHEEVOS_HOST=host:port` calls `rc_client_set_host` in
+  `src/cheevos/cheevos_client.cpp`, so spruce can point DSperate at RAOfflineProxy
+  (`spruce/scripts/emu/lib/dsperate_functions.sh`). Unset, it talks to retroachievements.org.
+
 Upstream took the two earlier patches into 1.6.0:
 
 - `0001-dmabuf-guard-no-wayland.py` — guarded `DmabufOut::open` so `display_wl.cpp` would
